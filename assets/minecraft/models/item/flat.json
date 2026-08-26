@@ -1,0 +1,15 @@
+{
+	"format_version": "1.21.11",
+	"credit": "Made with Blockbench",
+	"ambientocclusion": false,
+	"elements": [
+		{
+			"from": [0, 0, 8],
+			"to": [16, 16, 8],
+			"color": 8,
+			"faces": {
+				"south": {"uv": [0, 0, 16, 16], "texture": "#layer0"}
+			}
+		}
+	]
+}
