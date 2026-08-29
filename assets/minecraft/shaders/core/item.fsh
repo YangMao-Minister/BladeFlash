@@ -1,28 +1,83 @@
 #version 330
+#extension GL_ARB_separate_shader_objects : require
 
-#moj_import <minecraft:fog.glsl>
-#moj_import <minecraft:dynamictransforms.glsl>
-#moj_import <minecraft:constants.glsl>
-#moj_import <minecraft:projection.glsl>
+#ifdef GLINT
+#include <minecraft:globals.glsl>
+#endif
+#include <minecraft:fog.glsl>
+#include <minecraft:dynamictransforms.glsl>
+#include <minecraft:oit.glsl>
+#include <minecraft:constants.glsl>
+
+#ifndef OIT
+layout(std140) uniform Projection {
+    mat4 ProjMat;
+};
+#endif
 
 uniform sampler2D Sampler0;
 
-in float sphericalVertexDistance;
-in float cylindricalVertexDistance;
-in vec4 vertexColor;
-in vec4 lightMapColor;
-in vec4 overlayColor;
-in vec2 texCoord0;
-flat in float isMarker;
-in vec2 normalizedUV;
-in vec4 position0;
-in vec4 position1;
-in vec4 position2;
-in vec4 position3;
-in vec4 cornerUV01;
-in vec4 cornerUV23;
+#ifdef GLINT
+uniform sampler2D GlintSampler;
+#endif
 
-out vec4 fragColor;
+#ifndef OIT_ALPHA_ONLY
+layout(location = 0) in float sphericalVertexDistance;
+layout(location = 1) in float cylindricalVertexDistance;
+#endif
+layout(location = 2) in vec4 vertexColor;
+#ifndef OIT_ALPHA_ONLY
+layout(location = 3) in vec4 lightMapColor;
+layout(location = 4) in vec4 overlayColor;
+#endif
+layout(location = 5) in vec2 texCoord0;
+
+#ifdef GLINT
+layout(location = 6) in vec2 texCoordGlint;
+flat layout(location = 8) in float isMarker;
+layout(location = 9) in vec4 position0;
+layout(location = 10) in vec4 position1;
+layout(location = 11) in vec4 position2;
+layout(location = 12) in vec4 position3;
+layout(location = 13) in vec2 normalizedUV;
+layout(location = 14) in vec4 cornerUV01;
+layout(location = 15) in vec4 cornerUV23;
+#else
+flat layout(location = 6) in float isMarker;
+layout(location = 7) in vec4 position0;
+layout(location = 8) in vec4 position1;
+layout(location = 9) in vec4 position2;
+layout(location = 10) in vec4 position3;
+layout(location = 11) in vec2 normalizedUV;
+layout(location = 12) in vec4 cornerUV01;
+layout(location = 13) in vec4 cornerUV23;
+#endif
+
+#ifndef OIT_ALPHA_ONLY
+layout(location = 0) out vec4 fragColor;
+#endif
+
+#ifndef OIT_ALPHA_ONLY
+vec4 calculateFinalColor(vec4 color) {
+    color.rgb = mix(overlayColor.rgb, color.rgb, overlayColor.a);
+    color *= lightMapColor;
+
+    #ifdef GLINT
+    vec4 glintColor = GlintAlpha * texture(GlintSampler, texCoordGlint);// Glint color modulator?
+    // Matches BlendFuntion.GLINT
+    color.rgb += glintColor.rgb * glintColor.rgb;
+    #endif
+
+    #ifdef OIT_ACCUMULATE
+    color = sampleColorForAccumulation(color);
+    vec4 fogColor = vec4(FogColor.rgb * color.a, FogColor.a);
+    #else
+    vec4 fogColor = FogColor;
+    #endif
+
+    return apply_fog(color, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, fogColor);
+}
+#endif
 
 vec4 encodeInt(int i) {
     int s = int(i < 0) * 128;
@@ -48,23 +103,18 @@ vec4 encodeFloat(float v) {
 }
 
 void main() {
-    vec4 textureColor = texture(Sampler0, texCoord0);
+    vec4 color = texture(Sampler0, texCoord0);
 
+    vec3 pInterp = position0.xyz + position1.xyz + position2.xyz + position3.xyz;
+    vec3 dpdx = dFdx(pInterp);
+    vec3 dpdy = dFdy(pInterp);
+    vec2 dtdx = dFdx(texCoord0);
+    vec2 dtdy = dFdy(texCoord0);
+
+    #ifndef OIT_ALPHA_ONLY
     if(isMarker > 0.0 && ProjMat[2][3] != 0.0) {
-        // if(abs(textureColor.a - 254.0 / 255.0) > 0.0001) {
-        //     discard;
-        // }
-
         vec2 pixel = floor(gl_FragCoord.xy);
-        // if(pixel.y >= 1.0) {
-        //     discard;
-        // }
 
-        // Data
-        // 0 - marker
-        // 1-16 - projection matrix
-        // 17-32 - view matrix
-        // 32+ - vertex positions
         if(pixel.x == 0) {
             fragColor = EXISTENCE;
         } else if(pixel.x < 17) {
@@ -77,28 +127,55 @@ void main() {
             float value = ModelViewMat[index / 4][index % 4];
             fragColor = encodeFloat(value);
         } else if(pixel.x >= 33) {
-            int index = int(pixel.x - 33) % 4;
+            int index = int(pixel.x - 33) % 5;
 
-            // 精确采样纹理
             vec2 imgSize = vec2(16.0);
             vec2 atlasSize = textureSize(Sampler0, 0);
             vec2 scale = imgSize / atlasSize;
-            int texel = int(pixel.x - 33) / 4 + 1;
+            int texel = int(pixel.x - 33) / 5 + 1;
 
-            // 从四个角点 UV 恢复图像在 atlas 中的左上角起点（与烘焙顶点顺序无关）
-            vec2 uv0 = cornerUV01.xy / position0.w;
-            vec2 uv1 = cornerUV01.zw / position1.w;
-            vec2 uv2 = cornerUV23.xy / position2.w;
-            vec2 uv3 = cornerUV23.zw / position3.w;
-            vec2 start = min(min(uv0, uv1), min(uv2, uv3));
+            if (texel < 0 || texel >= 16) {
+                discard;
+            }
 
-            // 采样纹素中心，避免线性过滤时采到纹素边界
+            // 每个顶点只携带自己那个角点，片元收到的 positionN 是按重心坐标
+            // 缩放过的；除以 w 即可还原真实角点。w==0 表示该角点不参与本
+            // 三角形（或落在对角线上），用平行四边形关系从其余角点推出。
+            bool has0 = position0.w > 0.0;
+            bool has1 = position1.w > 0.0;
+            bool has2 = position2.w > 0.0;
+            bool has3 = position3.w > 0.0;
+
+            vec2 u0 = has0 ? cornerUV01.xy / position0.w : vec2(0.0);
+            vec2 u1 = has1 ? cornerUV01.zw / position1.w : vec2(0.0);
+            vec2 u2 = has2 ? cornerUV23.xy / position2.w : vec2(0.0);
+            vec2 u3 = has3 ? cornerUV23.zw / position3.w : vec2(0.0);
+            vec3 pos0 = has0 ? position0.xyz / position0.w : vec3(0.0);
+            vec3 pos1 = has1 ? position1.xyz / position1.w : vec3(0.0);
+            vec3 pos2 = has2 ? position2.xyz / position2.w : vec3(0.0);
+            vec3 pos3 = has3 ? position3.xyz / position3.w : vec3(0.0);
+
+            if(!has0 && has1 && has2 && has3) {
+                pos0 = pos1 + pos3 - pos2;
+                u0 = u1 + u3 - u2;
+            } else if(!has1 && has0 && has2 && has3) {
+                pos1 = pos0 + pos2 - pos3;
+                u1 = u0 + u2 - u3;
+            } else if(!has2 && has0 && has1 && has3) {
+                pos2 = pos1 + pos3 - pos0;
+                u2 = u1 + u3 - u0;
+            } else if(!has3 && has0 && has1 && has2) {
+                pos3 = pos0 + pos2 - pos1;
+                u3 = u0 + u2 - u1;
+            }
+
+            vec2 start = min(min(u0, u1), min(u2, u3));
+
             vec2 sampleCoord = start + (vec2(texel, 0) + 0.5) / imgSize * scale;
-            // vec2 sampleCoord = start + ((vec2(texel, 0) + 0.5) / imgSize - normalizedUV) * scale;
 
-            vec2 data = texture(Sampler0, sampleCoord, 0).rg * 255.0;
+            vec2 target = texture(Sampler0, sampleCoord, 0).rg * 255.0;
 
-            if(data == vec2(0.0) || data.x > imgSize.x || data.y > imgSize.y) {
+            if(target == vec2(0.0) || target.x > imgSize.x || target.y > imgSize.y) {
                 discard;
             }
 
@@ -107,52 +184,53 @@ void main() {
                 return;
             }
 
-            // 双线性透视矫正插值获取像素pos
-            vec3 pos0 = position0.xyz / position0.w;
-            vec3 pos1 = position1.xyz / position1.w;
-            vec3 pos2 = position2.xyz / position2.w;
-            vec3 pos3 = position3.xyz / position3.w;
+            // 26.3 烘焙出的 south 面角点顺序（模型坐标 -> 图像 UV）：
+            //   p0(0,16,8)@(0,0)  p1(0,0,8)@(0,1)
+            //   p2(16,0,8)@(1,1)  p3(16,16,8)@(1,0)
+            // 图像 v 与模型 y 反向：v=0 的边是 p0->p3，v=1 的边是 p1->p2。
+            // 取 texel 中心 (target + 0.5)，与上面取颜色用的采样点一致。
+            vec2 uv = (target + 0.5) / imgSize;
+            vec3 posTop = mix(pos0, pos3, uv.x);
+            vec3 posBottom = mix(pos1, pos2, uv.x);
+            vec3 fallbackPos = mix(posTop, posBottom, uv.y);
 
-            // data 是纹素坐标(0~15)，归一化到 [0,1)
-            vec2 uv = data / imgSize;
-            // 各角点在图像内的位置(0..1)，据此计算与顶点顺序无关的权重
-            vec2 iuv0 = (uv0 - start) / scale;
-            vec2 iuv1 = (uv1 - start) / scale;
-            vec2 iuv2 = (uv2 - start) / scale;
-            vec2 iuv3 = (uv3 - start) / scale;
-            float w0 = (1.0 - abs(uv.x - iuv0.x)) * (1.0 - abs(uv.y - iuv0.y));
-            float w1 = (1.0 - abs(uv.x - iuv1.x)) * (1.0 - abs(uv.y - iuv1.y));
-            float w2 = (1.0 - abs(uv.x - iuv2.x)) * (1.0 - abs(uv.y - iuv2.y));
-            float w3 = (1.0 - abs(uv.x - iuv3.x)) * (1.0 - abs(uv.y - iuv3.y));
+            // 用 atlas UV 本身作为基方向，而不是 normalizedUV 或三角形对角线。
+            vec2 targetAtlas = start + (target + 0.5) / imgSize * scale;
+            vec2 deltaT = targetAtlas - texCoord0;
+            float detT = dtdx.x * dtdy.y - dtdx.y * dtdy.x;
+            vec3 pos = fallbackPos;
+            if(abs(detT) > 1e-12) {
+                vec3 dPdU = (dpdx * dtdy.y - dpdy * dtdx.y) / detT;
+                vec3 dPdV = (dpdy * dtdx.x - dpdx * dtdy.x) / detT;
+                pos = pInterp + dPdU * deltaT.x + dPdV * deltaT.y;
+            }
 
-            vec3 pos = (w0 * pos0 + w1 * pos1 + w2 * pos2 + w3 * pos3) / (w0 + w1 + w2 + w3);
-
-            // fragColor = vec4(uv, 0.0, 1.0);
-            // fragColor = vec4(texture(Sampler0, sampleCoord).rg, 0.0, 1.0);
-
-            fragColor = encodeFloat12000(pos[index - 1]);
+            if(index == 1) {
+                vec2 sampleCoord = start + (target + 0.5) / imgSize * scale;
+                fragColor = texture(Sampler0, sampleCoord, 0);
+                return;
+            }
+            fragColor = encodeFloat12000(pos[index - 2]);
         }
-
-        return;
-
-        fragColor = textureColor;
         return;
     }
+    #endif
 
-    // if(textureColor.a == MARKER) {
-    //     fragColor = vec4(1.0);
-    //     return;
-    // }
-
-#ifdef ALPHA_CUTOUT
-    if(textureColor.a < ALPHA_CUTOUT) {
+    #ifdef ALPHA_CUTOUT
+    if(color.a < ALPHA_CUTOUT) {
         discard;
     }
-#endif
+    #endif
 
-    textureColor *= vertexColor * ColorModulator;
-    textureColor.rgb = mix(overlayColor.rgb, textureColor.rgb, overlayColor.a);
-    textureColor *= lightMapColor;
+    color *= vertexColor * ColorModulator;
 
-    fragColor = apply_fog(textureColor, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor);
+    #ifdef GLINT
+    color.a = max(color.a, GlintAlpha);
+    #endif
+
+    #ifdef OIT_ALPHA_ONLY
+    executeAlphaOnlyPhase(gl_FragCoord.z, color.a);
+    #else
+    fragColor = calculateFinalColor(color);
+    #endif
 }

@@ -1,9 +1,8 @@
 {
     "pack": {
         "description": "A WorldSpace BladeFlash. By Zenoxite.",
-        "pack_format": 15,
-        "min_format": 15,
-        "max_format": 88,
-        "supported_formats": [15, 64]
+        "min_format": [89, 0],
+        "max_format": [97, 0],
+        "pack_format": 97
     }
 }

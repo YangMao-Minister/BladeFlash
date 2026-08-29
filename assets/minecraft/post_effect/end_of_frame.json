@@ -1,0 +1,102 @@
+{
+    "targets": {
+        "data": {
+            "persistent": true,
+            "height": 2
+        },
+        "prev_data": {
+            "persistent": true,
+            "height": 2
+        },
+        "data_swap": {
+            "height": 2
+        },
+        "tail": {},
+        "swap": {}
+    },
+    "passes": [
+        {
+            "vertex_shader": "post/data",
+            "fragment_shader": "post/data",
+            "inputs": [
+                {
+                    "sampler_name": "Main",
+                    "target": "minecraft:main"
+                },
+                {
+                    "sampler_name": "PrevData",
+                    "target": "minecraft:prev_data"
+                }
+            ],
+            "uniforms": {},
+            "output": "minecraft:data"
+        },
+        {
+            "vertex_shader": "post/tail",
+            "fragment_shader": "post/tail",
+            "inputs": [
+                {
+                    "sampler_name": "Data",
+                    "target": "minecraft:data"
+                },
+                {
+                    "sampler_name": "PrevData",
+                    "target": "minecraft:prev_data"
+                },
+                {
+                    "sampler_name": "Depth",
+                    "target": "minecraft:main",
+                    "use_depth_buffer": true
+                },
+                {
+                    "sampler_name": "Noise",
+                    "location": "noise_tile",
+                    "height": 512,
+                    "width": 512
+                }
+            ],
+            "uniforms": {},
+            "output": "minecraft:tail"
+        },
+        {
+            "vertex_shader": "core/screenquad",
+            "fragment_shader": "post/blend",
+            "inputs": [
+                {
+                    "sampler_name": "Main",
+                    "target": "minecraft:main"
+                },
+                {
+                    "sampler_name": "Tail",
+                    "target": "minecraft:tail"
+                }
+            ],
+            "uniforms": {},
+            "output": "minecraft:swap"
+        },
+        {
+            "vertex_shader": "core/screenquad",
+            "fragment_shader": "post/copy",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "minecraft:swap"
+                }
+            ],
+            "uniforms": {},
+            "output": "minecraft:main"
+        },
+        {
+            "vertex_shader": "core/screenquad",
+            "fragment_shader": "post/copy",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "minecraft:data"
+                }
+            ],
+            "uniforms": {},
+            "output": "minecraft:prev_data"
+        }
+    ]
+}
