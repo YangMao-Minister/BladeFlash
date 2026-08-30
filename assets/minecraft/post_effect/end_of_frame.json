@@ -36,6 +36,10 @@
             "fragment_shader": "post/tail",
             "inputs": [
                 {
+                    "sampler_name": "Main",
+                    "target": "minecraft:main"
+                },
+                {
                     "sampler_name": "Data",
                     "target": "minecraft:data"
                 },
@@ -60,27 +64,11 @@
         },
         {
             "vertex_shader": "core/screenquad",
-            "fragment_shader": "post/blend",
-            "inputs": [
-                {
-                    "sampler_name": "Main",
-                    "target": "minecraft:main"
-                },
-                {
-                    "sampler_name": "Tail",
-                    "target": "minecraft:tail"
-                }
-            ],
-            "uniforms": {},
-            "output": "minecraft:swap"
-        },
-        {
-            "vertex_shader": "core/screenquad",
             "fragment_shader": "post/copy",
             "inputs": [
                 {
                     "sampler_name": "In",
-                    "target": "minecraft:swap"
+                    "target": "minecraft:tail"
                 }
             ],
             "uniforms": {},

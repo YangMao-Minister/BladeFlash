@@ -7,6 +7,7 @@
 #include <minecraft:projection.glsl>
 #include <minecraft:sample_lightmap.glsl>
 #include <minecraft:constants.glsl>
+#include <minecraft:utils.glsl>
 
 layout(location = 0) in vec3 Position;
 layout(location = 1) in vec4 Color;

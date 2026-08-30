@@ -18,7 +18,7 @@ void main() {
     frame = int(texelFetch(PrevDataSampler, ivec2(0, 1), 0).r * 255.0);
 
     vertexCount = 0;
-    for(int i = 0; i < 255 && texelFetch(MainSampler, ivec2(33 + i * 5, 0), 0) == EXISTENCE; i++) {
+    for(int i = 0; i < 255 && texelFetch(MainSampler, ivec2(33 + i * VERTEX_PIXELS, 0), 0) == EXISTENCE; i++) {
         vertexCount++;
     }
 }

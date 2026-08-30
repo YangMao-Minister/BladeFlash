@@ -55,14 +55,14 @@ void main() {
     mvpInverse = inverse(viewProjMat);
 
     vertexCount = 0;
-    for(int i = 0; i < 255 && texelFetch(DataSampler, ivec2(33 + i * 5, 0), 0) == EXISTENCE; i++) {
+    for(int i = 0; i < 255 && texelFetch(DataSampler, ivec2(33 + i * VERTEX_PIXELS, 0), 0) == EXISTENCE; i++) {
         vertexCount++;
     }
 
     prevCameraBlockPos.x = decodeInt(texelFetch(PrevDataSampler, ivec2(1, 1), 0).rgb);
     prevCameraBlockPos.y = decodeInt(texelFetch(PrevDataSampler, ivec2(2, 1), 0).rgb);
     prevCameraBlockPos.z = decodeInt(texelFetch(PrevDataSampler, ivec2(3, 1), 0).rgb);
-    prevCameraOffset.x = decodeFloat(texelFetch(PrevDataSampler, ivec2(5, 1), 0).rgb);
-    prevCameraOffset.y = decodeFloat(texelFetch(PrevDataSampler, ivec2(6, 1), 0).rgb);
-    prevCameraOffset.z = decodeFloat(texelFetch(PrevDataSampler, ivec2(7, 1), 0).rgb);
+    prevCameraOffset.x = decodeFloat(texelFetch(PrevDataSampler, ivec2(4, 1), 0).rgb);
+    prevCameraOffset.y = decodeFloat(texelFetch(PrevDataSampler, ivec2(5, 1), 0).rgb);
+    prevCameraOffset.z = decodeFloat(texelFetch(PrevDataSampler, ivec2(6, 1), 0).rgb);
 }

@@ -8,6 +8,7 @@
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:oit.glsl>
 #include <minecraft:constants.glsl>
+#include <minecraft:utils.glsl>
 
 #ifndef OIT
 layout(std140) uniform Projection {
@@ -79,29 +80,6 @@ vec4 calculateFinalColor(vec4 color) {
 }
 #endif
 
-vec4 encodeInt(int i) {
-    int s = int(i < 0) * 128;
-    i = abs(i);
-    int r = i % 256;
-    i = i / 256;
-    int g = i % 256;
-    i = i / 256;
-    int b = i % 256;
-    return vec4(float(r) / 255.0, float(g) / 255.0, float(b + s) / 255.0, 1.0);
-}
-
-vec4 encodeFloat12000(float v) {
-    v *= 12000.0;
-    v = floor(v);
-    return encodeInt(int(v));
-}
-
-vec4 encodeFloat(float v) {
-    v *= 40000.0;
-    v = floor(v);
-    return encodeInt(int(v));
-}
-
 void main() {
     vec4 color = texture(Sampler0, texCoord0);
 
@@ -127,20 +105,17 @@ void main() {
             float value = ModelViewMat[index / 4][index % 4];
             fragColor = encodeFloat(value);
         } else if(pixel.x >= 33) {
-            int index = int(pixel.x - 33) % 5;
+            int index = int(pixel.x - 33) % VERTEX_PIXELS;
 
             vec2 imgSize = vec2(16.0);
             vec2 atlasSize = textureSize(Sampler0, 0);
             vec2 scale = imgSize / atlasSize;
-            int texel = int(pixel.x - 33) / 5 + 1;
+            int texel = int(pixel.x - 33) / VERTEX_PIXELS + 1;
 
             if (texel < 0 || texel >= 16) {
                 discard;
             }
 
-            // 每个顶点只携带自己那个角点，片元收到的 positionN 是按重心坐标
-            // 缩放过的；除以 w 即可还原真实角点。w==0 表示该角点不参与本
-            // 三角形（或落在对角线上），用平行四边形关系从其余角点推出。
             bool has0 = position0.w > 0.0;
             bool has1 = position1.w > 0.0;
             bool has2 = position2.w > 0.0;
@@ -194,7 +169,7 @@ void main() {
             vec3 posBottom = mix(pos1, pos2, uv.x);
             vec3 fallbackPos = mix(posTop, posBottom, uv.y);
 
-            // 用 atlas UV 本身作为基方向，而不是 normalizedUV 或三角形对角线。
+            // 用 atlas UV 本身作为基方向
             vec2 targetAtlas = start + (target + 0.5) / imgSize * scale;
             vec2 deltaT = targetAtlas - texCoord0;
             float detT = dtdx.x * dtdy.y - dtdx.y * dtdy.x;
