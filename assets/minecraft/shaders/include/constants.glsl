@@ -1,9 +1,8 @@
-#define TARGET 254.0/255.0
-#define MARKER vec4(114.0, 51.0, 4.0, 255.0) / 255.0
+#define MARKER 254.0 / 255.0
 #define EXISTENCE vec4(67, 78, 91, 255) / 255.0
+#define END_PORTAL_FX vec4(233, 22, 33, 255) / 255.0
 #define MAX_VERTEX 128
-#define MAX_FRAMES 24
+#define MAX_FRAMES 28
 #define VERTEX_PIXELS 5
 
 #define TURE_WORLDSPACE
-

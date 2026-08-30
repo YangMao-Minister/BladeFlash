@@ -36,6 +36,23 @@ vec3 interpolateAttribute(
     return attrInterp / invW;
 }
 
+vec4 interpolateAttribute(
+    vec4 attrA,
+    vec4 attrB,
+    vec4 attrC,
+    float invWA,
+    float invWB,
+    float invWC,
+    vec3 bary
+) {
+    // 透视校正：先除以 w，插值，再除以结果
+    vec4 attrInterp = bary.x * attrA * invWA +
+        bary.y * attrB * invWB +
+        bary.z * attrC * invWC;
+    float invW = bary.x * invWA + bary.y * invWB + bary.z * invWC;
+    return attrInterp / invW;
+}
+
 float interpolateAttribute(
     float attrA,
     float attrB,

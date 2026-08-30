@@ -1,9 +1,7 @@
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-#ifdef GLINT
 #include <minecraft:globals.glsl>
-#endif
 #include <minecraft:fog.glsl>
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:oit.glsl>
@@ -112,7 +110,7 @@ void main() {
             vec2 scale = imgSize / atlasSize;
             int texel = int(pixel.x - 33) / VERTEX_PIXELS + 1;
 
-            if (texel < 0 || texel >= 16) {
+            if(texel < 0 || texel >= 16) {
                 discard;
             }
 
@@ -170,7 +168,7 @@ void main() {
             vec3 fallbackPos = mix(posTop, posBottom, uv.y);
 
             // 用 atlas UV 本身作为基方向
-            vec2 targetAtlas = start + (target + 0.5) / imgSize * scale;
+            vec2 targetAtlas = start + (target + vec2(1.0, 0.0)) / imgSize * scale;
             vec2 deltaT = targetAtlas - texCoord0;
             float detT = dtdx.x * dtdy.y - dtdx.y * dtdy.x;
             vec3 pos = fallbackPos;
@@ -189,6 +187,24 @@ void main() {
         }
         return;
     }
+
+    // 末地传送门渲染
+    if(color == END_PORTAL_FX) {
+        if(ProjMat[2][3] != 0.0) {
+            fragColor = END_PORTAL_FX;
+            return;
+        }
+        // 在gui里画个假的
+        vec3 guiColor = vec3(0.08, 0.01, 0.12);
+        // vec2 uv = gl_FragCoord.xy / ScreenSize;
+        // for(int i = 0; i < 4; i++) {
+        //     vec2 layerUV = pow(fract(uv * 32.0), 4.0);
+        //     guiColor += vec3(layerUV, 0.0);
+        // }
+        fragColor = vec4(guiColor, 1.0);
+        return;
+    }
+
     #endif
 
     #ifdef ALPHA_CUTOUT

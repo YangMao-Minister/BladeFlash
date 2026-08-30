@@ -2,6 +2,7 @@
 #extension GL_ARB_separate_shader_objects : require
 
 #include <minecraft:globals.glsl>
+#include <minecraft:matrix.glsl>
 #include <minecraft:constants.glsl>
 #include <minecraft:utils.glsl>
 
@@ -9,6 +10,8 @@ uniform sampler2D MainSampler;
 uniform sampler2D DataSampler;
 uniform sampler2D DepthSampler;
 uniform sampler2D NoiseSampler;
+uniform sampler2D EndSkySampler;
+uniform sampler2D EndPortalSampler;
 
 layout(location = 0) in vec2 texCoord;
 flat layout(location = 1) in mat4 mvpInverse;
@@ -20,6 +23,28 @@ flat layout(location = 18) in ivec3 prevCameraBlockPos;
 flat layout(location = 19) in vec3 prevCameraOffset;
 
 layout(location = 0) out vec4 fragColor;
+
+vec4 projection_from_position(vec4 position) {
+    vec4 projection = position * 0.5;
+    projection.xy = vec2(projection.x + projection.w, projection.y + projection.w);
+    projection.zw = position.zw;
+    return projection;
+}
+
+// 末地门渲染
+const vec3[] COLORS = vec3[](vec3(0.022087, 0.098399, 0.110818), vec3(0.011892, 0.095924, 0.089485), vec3(0.027636, 0.101689, 0.100326), vec3(0.046564, 0.109883, 0.114838), vec3(0.064901, 0.117696, 0.097189), vec3(0.063761, 0.086895, 0.123646), vec3(0.084817, 0.111994, 0.166380), vec3(0.097489, 0.154120, 0.091064), vec3(0.106152, 0.131144, 0.195191), vec3(0.097721, 0.110188, 0.187229), vec3(0.133516, 0.138278, 0.148582), vec3(0.070006, 0.243332, 0.235792), vec3(0.196766, 0.142899, 0.214696), vec3(0.047281, 0.315338, 0.321970), vec3(0.204675, 0.390010, 0.302066), vec3(0.080955, 0.314821, 0.661491));
+
+const mat4 SCALE_TRANSLATE = mat4(0.5, 0.0, 0.0, 0.25, 0.0, 0.5, 0.0, 0.25, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+
+mat4 end_portal_layer(float layer) {
+    mat4 translate = mat4(1.0, 0.0, 0.0, 17.0 / layer, 0.0, 1.0, 0.0, (2.0 + layer / 1.5) * (GameTime * 10.5), 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+
+    mat2 rotate = mat2_rotate_z(radians((layer * layer * 4321.0 + layer * 9.0) * 2.0));
+
+    mat2 scale = mat2((4.5 - layer / 4.0) * 2.0);
+
+    return mat4(scale * rotate) * translate * SCALE_TRANSLATE;
+}
 
 vec3 reconstructPosition(in vec2 uv, in float z) {
     vec4 ndc = vec4(uv * 2.0 - 1.0, z, 1.0);
@@ -95,7 +120,7 @@ struct Triangle {
 struct ClipVertex {
     vec3 pos;    // 视图空间
     vec3 color;
-    float index; // 用于渐变的索引
+    float index;
 };
 
 // 在近平面 z = -nearPlane 处插值两个视图空间顶点
@@ -193,7 +218,33 @@ int clipTriangleNear(
 struct ShadeResult {
     vec3 color;
     vec2 disort;
+    float alpha;
+    bool additive;
 };
+
+void shadePortal(inout ShadeResult result, vec3 fColor, float smoothIndex, vec4 clip, vec2 dir) {
+    result.additive = false;
+
+    float x = smoothIndex / float(MAX_FRAMES - 1);
+    float timeFactor = smoothstep(1.0, 0.0, x);
+    float edgeFactor = length(fColor);
+    result.alpha = edgeFactor * timeFactor;
+
+    vec4 texProj0 = projection_from_position(clip);
+    vec3 color = textureProj(EndSkySampler, texProj0).rgb * COLORS[0];
+
+    for(int i = 0; i < 7; i++) {
+        vec4 P = texProj0 * end_portal_layer(float(i + 1));
+        vec2 portalUV = fract(0.2 * (P.xy / P.w));
+        color += 3.0 * texture(EndPortalSampler, portalUV).rgb * COLORS[i];
+    }
+    result.color = color;
+
+    result.disort = dir * 30.0 * timeFactor * pow(edgeFactor, 4.0);
+}
+
+void shadeFlash(inout ShadeResult result) {
+}
 
 // 光栅化一个裁剪后的三角形（3 个视图空间顶点 + 颜色 + 索引）
 ShadeResult shadeClippedTriangle(
@@ -206,6 +257,8 @@ ShadeResult shadeClippedTriangle(
     ShadeResult result;
     result.color = vec3(0.0);
     result.disort = vec2(0.0);
+    result.alpha = 1.0;
+    result.additive = true;
 
     vec4 cA = projection * vec4(a.pos, 1.0);
     vec4 cB = projection * vec4(b.pos, 1.0);
@@ -220,7 +273,6 @@ ShadeResult shadeClippedTriangle(
         return result;
 
     vec3 bary = barycentric(pixelPos, sA, sB, sC);
-
     float invWA = 1.0 / cA.w;
     float invWB = 1.0 / cB.w;
     float invWC = 1.0 / cC.w;
@@ -235,16 +287,25 @@ ShadeResult shadeClippedTriangle(
 
     vec3 fColor = interpolateAttribute(a.color, b.color, c.color, invWA, invWB, invWC, bary);
     float smoothIndex = interpolateAttribute(a.index, b.index, c.index, invWA, invWB, invWC, bary);
-    float x = smoothIndex / float(MAX_FRAMES - 1);
-    result.color = fColor * (1.0 - x);
+    vec4 clip = interpolateAttribute(cA, cB, cC, invWA, invWB, invWC, bary);
+    // float x = smoothIndex / float(MAX_FRAMES - 1);
+    // result.color = fColor * (1.0 - x);
 
-    // 扭曲方向：用刀光三角形自身的屏幕方向（最长边法线）。
-    // 相邻三角形共享边，方向在接缝处连续，避免 dFdx/dFdy 的导数跳变。
-    // vec2 edge = sB - sA;
-    // vec2 nrm = vec2(-edge.y, edge.x);
-    // vec2 dir = nrm / max(length(nrm), 1e-5);
-    vec2 dir = normalize(vec2(dFdx(smoothIndex), dFdy(smoothIndex)));
-    result.disort = dir * 50.0 * (1.0 - x);
+    // // 扭曲方向：用刀光三角形自身的屏幕方向（最长边法线）。
+    // // 相邻三角形共享边，方向在接缝处连续，避免 dFdx/dFdy 的导数跳变。
+    // // vec2 edge = sB - sA;
+    // // vec2 nrm = vec2(-edge.y, edge.x);
+    // // vec2 dir = nrm / max(length(nrm), 1e-5);
+    // vec2 dir = normalize(vec2(dFdx(smoothIndex), dFdy(smoothIndex)));
+    // result.disort = dir * 50.0 * (1.0 - x);
+
+    // 扭曲方向用共享边 A->B 的法线：三角形 i 的 B->C 就是三角形 i+1 的 A->B，
+    // 接缝处方向连续，避免 dFdx/dFdy 的导数跳变伪影。
+    vec2 edge = sB - sA;
+    vec2 nrm = vec2(-edge.y, edge.x);
+    vec2 dir = nrm / max(length(nrm), 1e-5);
+
+    shadePortal(result, fColor, smoothIndex, clip, dir);
 
     return result;
 }
@@ -312,6 +373,9 @@ ShadeResult sampleTailSegment(int index, vec3 fragPos, float fragDepth) {
     ShadeResult result;
     result.color = vec3(0.0);
     result.disort = vec2(0.0);
+    result.alpha = 1.0;
+    result.additive = true;
+
     vec2 pixelPos = gl_FragCoord.xy;
 
     vec3 posA = vertexA.pos;
@@ -361,6 +425,8 @@ ShadeResult sampleTailTriangle(int index, vec3 fragPos, float fragDepth) {
     ShadeResult result;
     result.color = vec3(0.0);
     result.disort = vec2(0.0);
+    result.alpha = 1.0;
+    result.additive = true;
 
     // 1. 变换到视图空间
     vec3 vA = (viewMat * vec4(tri.posA, 1.0)).xyz;
@@ -378,7 +444,15 @@ ShadeResult sampleTailTriangle(int index, vec3 fragPos, float fragDepth) {
     for(int i = 1; i < 3; i++) {
         if(i < count - 1) {
             ShadeResult r = shadeClippedTriangle(clipped[0], clipped[i], clipped[i + 1], fragPos, fragDepth);
-            result.color += r.color;
+            if(r.additive) {
+                result.color += r.color;
+            } else {
+                result.color = r.color;
+                result.alpha = r.alpha;
+                result.additive = false;
+                result.disort = r.disort;
+                break;
+            }
             // 取最强而非累加：避免接缝处两个三角形偏移叠加
             if(length(r.disort) > length(result.disort)) {
                 result.disort = r.disort;
@@ -392,19 +466,35 @@ vec3 shade(vec3 fragPos, float depth) {
     ShadeResult result;
     result.color = vec3(0.0);
     result.disort = vec2(0.0);
+    result.alpha = 1.0;
+    result.additive = true;
+
     int segments = MAX_FRAMES - 1;
     for(int i = 0; i < segments; i++) {
         ShadeResult r = vertexCount > 1 ? sampleTailTriangle(i, fragPos, depth) : sampleTailSegment(i, fragPos, depth);
-        result.color += r.color;
-        result.disort += r.disort;
-        
+        if(r.additive) {
+            result.color += r.color;
+        } else {
+            result.color = r.color;
+            result.additive = false;
+            result.alpha = r.alpha;
+            result.disort = r.disort;
+            break;
+        }
+        if(length(r.disort) > length(result.disort)) {
+            result.disort = r.disort;
+        }
         if(length(result.color) > 0.01) {
             break;
         }
     }
 
     vec3 c = texture(MainSampler, texCoord + result.disort / ScreenSize).rgb;
-    c += result.color;
+    if(result.additive) {
+        c += result.color;
+    } else {
+        c = mix(c, result.color, result.alpha);
+    }
     return c;
 }
 
@@ -412,7 +502,7 @@ void main() {
     float fragDepth = texture(DepthSampler, texCoord).r;
 
     if(texelFetch(DataSampler, ivec2(0, 0), 0) != EXISTENCE) {
-        fragColor = vec4(0.0);
+        fragColor = texture(MainSampler, texCoord);
         return;
     }
 

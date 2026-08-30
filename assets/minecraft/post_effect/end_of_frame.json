@@ -32,12 +32,36 @@
             "output": "minecraft:data"
         },
         {
+            "vertex_shader": "core/screenquad",
+            "fragment_shader": "post/star_fleid",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "main"
+                },
+                {
+                    "sampler_name": "EndSky",
+                    "location": "end_sky",
+                    "height": 256,
+                    "width": 256
+                },
+                {
+                    "sampler_name": "EndPortal",
+                    "location": "end_portal",
+                    "height": 256,
+                    "width": 256
+                }
+            ],
+            "uniforms": {},
+            "output": "minecraft:swap"
+        },
+        {
             "vertex_shader": "post/tail",
             "fragment_shader": "post/tail",
             "inputs": [
                 {
                     "sampler_name": "Main",
-                    "target": "minecraft:main"
+                    "target": "minecraft:swap"
                 },
                 {
                     "sampler_name": "Data",
@@ -57,6 +81,18 @@
                     "location": "noise_tile",
                     "height": 512,
                     "width": 512
+                },
+                {
+                    "sampler_name": "EndSky",
+                    "location": "end_sky",
+                    "height": 256,
+                    "width": 256
+                },
+                {
+                    "sampler_name": "EndPortal",
+                    "location": "end_portal",
+                    "height": 256,
+                    "width": 256
                 }
             ],
             "uniforms": {},
