@@ -105,12 +105,10 @@ void main() {
         } else if(pixel.x >= 33) {
             int index = int(pixel.x - 33) % VERTEX_PIXELS;
 
-            vec2 imgSize = vec2(16.0);
             vec2 atlasSize = textureSize(Sampler0, 0);
-            vec2 scale = imgSize / atlasSize;
             int texel = int(pixel.x - 33) / VERTEX_PIXELS + 1;
 
-            if(texel < 0 || texel >= 16) {
+            if(texel < 0 || texel >= 15) {
                 discard;
             }
 
@@ -143,12 +141,10 @@ void main() {
             }
 
             vec2 start = min(min(u0, u1), min(u2, u3));
-
-            vec2 sampleCoord = start + (vec2(texel, 0) + 0.5) / imgSize * scale;
-
-            vec2 target = texture(Sampler0, sampleCoord, 0).rg * 255.0;
-
-            if(target == vec2(0.0) || target.x > imgSize.x || target.y > imgSize.y) {
+            vec2 sampleCoord = start + (vec2(texel, 0) + 0.5) / atlasSize;
+            vec2 targetUV = texture(Sampler0, sampleCoord, 0).rg * 255.0;
+            vec2 imgSize = texture(Sampler0, start + vec2(0.0, 1.5) / atlasSize, 0).rg * 255.0;
+            if(targetUV == vec2(0.0) || targetUV.x > imgSize.x || targetUV.y > imgSize.y) {
                 discard;
             }
 
@@ -162,13 +158,13 @@ void main() {
             //   p2(16,0,8)@(1,1)  p3(16,16,8)@(1,0)
             // 图像 v 与模型 y 反向：v=0 的边是 p0->p3，v=1 的边是 p1->p2。
             // 取 texel 中心 (target + 0.5)，与上面取颜色用的采样点一致。
-            vec2 uv = (target + 0.5) / imgSize;
+            vec2 uv = (targetUV + 0.5) / imgSize;
             vec3 posTop = mix(pos0, pos3, uv.x);
             vec3 posBottom = mix(pos1, pos2, uv.x);
             vec3 fallbackPos = mix(posTop, posBottom, uv.y);
 
             // 用 atlas UV 本身作为基方向
-            vec2 targetAtlas = start + (target + vec2(1.0, 0.0)) / imgSize * scale;
+            vec2 targetAtlas = start + (targetUV + vec2(1.0, 0.0)) / atlasSize;
             vec2 deltaT = targetAtlas - texCoord0;
             float detT = dtdx.x * dtdy.y - dtdx.y * dtdy.x;
             vec3 pos = fallbackPos;
@@ -179,8 +175,7 @@ void main() {
             }
 
             if(index == 1) {
-                vec2 sampleCoord = start + (target + 0.5) / imgSize * scale;
-                fragColor = texture(Sampler0, sampleCoord, 0);
+                fragColor = texture(Sampler0, sampleCoord + vec2(0.0, 1.0) / atlasSize, 0);
                 return;
             }
             fragColor = encodeFloat12000(pos[index - 2]);
@@ -191,7 +186,7 @@ void main() {
     // 末地传送门渲染
     if(color == END_PORTAL_FX) {
         if(ProjMat[2][3] != 0.0) {
-            fragColor = END_PORTAL_FX;
+            fragColor = vec4((END_PORTAL_FX).rgb, 1.0);
             return;
         }
         // 在gui里画个假的

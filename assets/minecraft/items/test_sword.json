@@ -1,0 +1,21 @@
+{
+  "model": {
+    "type": "composite",
+    "models": [
+      {
+        "type": "model",
+        "model": "minecraft:item/diamond_sword"
+      },
+      {
+        "type": "model",
+        "model": "minecraft:item/netherite_sword",
+        "transformation": {
+          "scale": [1.1, 1.1, -1.1],
+          "translation": [-0.05, -0.05, 1.05],
+          "left_rotation": [0.0, 0.0, 0.0, 1.0],
+          "right_rotation": [0.0, 0.0, 0.0, 1.0]
+        }
+      }
+    ]
+  }
+}

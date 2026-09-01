@@ -9,7 +9,8 @@
 uniform sampler2D MainSampler;
 uniform sampler2D DataSampler;
 uniform sampler2D DepthSampler;
-uniform sampler2D NoiseSampler;
+uniform sampler2D Noise0Sampler;
+uniform sampler2D Noise1Sampler;
 uniform sampler2D EndSkySampler;
 uniform sampler2D EndPortalSampler;
 
@@ -84,8 +85,12 @@ float random2D(vec2 p) {
     return floatConstruct(hash(floatBitsToUint(p.x) ^ hash(floatBitsToUint(p.y))));
 }
 
-vec4 samplerNoise(vec2 uv) {
-    return texture(NoiseSampler, fract(uv));
+vec4 samplePerlinNoise(vec2 uv) {
+    return texture(Noise0Sampler, fract(uv));
+}
+
+vec4 sampleWorleyNoise(vec2 uv) {
+    return texture(Noise1Sampler, fract(uv));
 }
 
 float sdfSegment(in vec2 p, vec2 a, vec2 b, float d) {
@@ -222,13 +227,23 @@ struct ShadeResult {
     bool additive;
 };
 
-void shadePortal(inout ShadeResult result, vec3 fColor, float smoothIndex, vec4 clip, vec2 dir) {
+void shadePortal(inout ShadeResult result, vec3 fColor, float smoothIndex, vec4 clip, vec2 dir, vec2 localUV) {
     result.additive = false;
 
     float x = smoothIndex / float(MAX_FRAMES - 1);
-    float timeFactor = smoothstep(1.0, 0.0, x);
-    float edgeFactor = length(fColor);
-    result.alpha = edgeFactor * timeFactor;
+    const float k1 = 0.8;
+    float timeFactor = -1.0 / k1 + 1.0 / (k1 * x);
+    // float timeFactor = 1.0;
+    const float k2 = 1.5;
+    float edgeFactor = (2.0 - k2) / (2.0 - k2 * fColor.r);
+    // float edgeFactor = 1.0;
+
+    result.alpha = 1.0;
+    result.alpha = clamp(edgeFactor * timeFactor, 0.0, 1.0);
+
+    vec4 noise1 = sampleWorleyNoise(localUV * 2.0 - vec2(GameTime * 1200.0 * 1.8, 0.0));
+    float noiseFactor = (noise1.r + smoothstep(0.3, 0.0, localUV.x));
+    result.alpha *= noiseFactor;
 
     vec4 texProj0 = projection_from_position(clip);
     vec3 color = textureProj(EndSkySampler, texProj0).rgb * COLORS[0];
@@ -238,9 +253,12 @@ void shadePortal(inout ShadeResult result, vec3 fColor, float smoothIndex, vec4 
         vec2 portalUV = fract(0.2 * (P.xy / P.w));
         color += 3.0 * texture(EndPortalSampler, portalUV).rgb * COLORS[i];
     }
-    result.color = color;
 
-    result.disort = dir * 30.0 * timeFactor * pow(edgeFactor, 4.0);
+    // color += vec3(0.52, 0.0, 1.0) * smoothstep(0.9, 1.0, edgeFactor);
+
+    result.color = color;
+    // result.color = vec3(localUV, 0.0);
+    result.disort = dir * 20.0 * (1.0 - noiseFactor) * timeFactor;
 }
 
 void shadeFlash(inout ShadeResult result) {
@@ -288,6 +306,13 @@ ShadeResult shadeClippedTriangle(
     vec3 fColor = interpolateAttribute(a.color, b.color, c.color, invWA, invWB, invWC, bary);
     float smoothIndex = interpolateAttribute(a.index, b.index, c.index, invWA, invWB, invWC, bary);
     vec4 clip = interpolateAttribute(cA, cB, cC, invWA, invWB, invWC, bary);
+
+    vec2 localUVA = vec2((a.index / 2) / (MAX_FRAMES - 1), int(a.index) % 2 == 0 ? 0.0 : 1.0);
+    vec2 localUVB = vec2((b.index / 2) / (MAX_FRAMES - 1), int(b.index) % 2 == 0 ? 0.0 : 1.0);
+    vec2 localUVC = vec2((c.index / 2) / (MAX_FRAMES - 1), int(c.index) % 2 == 0 ? 0.0 : 1.0);
+
+    vec2 localUV = interpolateAttribute(localUVA, localUVB, localUVC, invWA, invWB, invWC, bary);
+
     // float x = smoothIndex / float(MAX_FRAMES - 1);
     // result.color = fColor * (1.0 - x);
 
@@ -296,16 +321,17 @@ ShadeResult shadeClippedTriangle(
     // // vec2 edge = sB - sA;
     // // vec2 nrm = vec2(-edge.y, edge.x);
     // // vec2 dir = nrm / max(length(nrm), 1e-5);
-    // vec2 dir = normalize(vec2(dFdx(smoothIndex), dFdy(smoothIndex)));
+    vec2 dir = vec2(dFdx(smoothIndex), dFdy(smoothIndex));
+    dir /= max(length(dir), 1e-5);
     // result.disort = dir * 50.0 * (1.0 - x);
 
     // 扭曲方向用共享边 A->B 的法线：三角形 i 的 B->C 就是三角形 i+1 的 A->B，
     // 接缝处方向连续，避免 dFdx/dFdy 的导数跳变伪影。
-    vec2 edge = sB - sA;
-    vec2 nrm = vec2(-edge.y, edge.x);
-    vec2 dir = nrm / max(length(nrm), 1e-5);
+    // vec2 edge = sB - sA;
+    // vec2 nrm = vec2(-edge.y, edge.x);
+    // vec2 dir = nrm / max(length(nrm), 1e-5);
 
-    shadePortal(result, fColor, smoothIndex, clip, dir);
+    shadePortal(result, fColor, smoothIndex, clip, dir, localUV);
 
     return result;
 }

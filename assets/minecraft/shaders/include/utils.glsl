@@ -19,6 +19,23 @@ vec4 perspectiveInterpolate(vec4 cA, vec4 cB, vec4 a, vec4 b, float k) {
     return mix(a * invWA, b * invWB, k) / invW;
 }
 
+vec2 interpolateAttribute(
+    vec2 attrA,
+    vec2 attrB,
+    vec2 attrC,
+    float invWA,
+    float invWB,
+    float invWC,
+    vec3 bary
+) {
+    // 透视校正：先除以 w，插值，再除以结果
+    vec2 attrInterp = bary.x * attrA * invWA +
+        bary.y * attrB * invWB +
+        bary.z * attrC * invWC;
+    float invW = bary.x * invWA + bary.y * invWB + bary.z * invWC;
+    return attrInterp / invW;
+}
+
 vec3 interpolateAttribute(
     vec3 attrA,
     vec3 attrB,

@@ -57,7 +57,7 @@ layout(location = 13) out vec4 cornerUV23;
 #endif
 
 void main() {
-    isMarker = texture(Sampler0, UV0).a == MARKER ? 1.0 : 0.0;
+    isMarker = texture(Sampler0, UV0).rgb == MARKER ? 1.0 : 0.0;
 
     position0 = position1 = position2 = position3 = vec4(0.0);
     cornerUV01 = cornerUV23 = vec4(0.0);

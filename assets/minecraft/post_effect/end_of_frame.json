@@ -77,8 +77,14 @@
                     "use_depth_buffer": true
                 },
                 {
-                    "sampler_name": "Noise",
-                    "location": "noise_tile",
+                    "sampler_name": "Noise0",
+                    "location": "noise_perlin",
+                    "height": 512,
+                    "width": 512
+                },
+                {
+                    "sampler_name": "Noise1",
+                    "location": "noise_worley",
                     "height": 512,
                     "width": 512
                 },
