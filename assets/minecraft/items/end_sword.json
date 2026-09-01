@@ -8,7 +8,7 @@
       },
       {
         "type": "minecraft:model",
-        "model": "minecraft:item/diamond_sword_overlay"
+        "model": "minecraft:item/end_sword_overlay"
       }
     ]
   }

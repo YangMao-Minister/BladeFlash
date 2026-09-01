@@ -242,7 +242,7 @@ void shadePortal(inout ShadeResult result, vec3 fColor, float smoothIndex, vec4 
     result.alpha = clamp(edgeFactor * timeFactor, 0.0, 1.0);
 
     vec4 noise1 = sampleWorleyNoise(localUV * 2.0 - vec2(GameTime * 1200.0 * 1.8, 0.0));
-    float noiseFactor = (noise1.r + smoothstep(0.3, 0.0, localUV.x));
+    float noiseFactor = (0.2 + 0.8 * noise1.r + smoothstep(0.8, 0.0, localUV.x));
     result.alpha *= noiseFactor;
 
     vec4 texProj0 = projection_from_position(clip);
@@ -254,7 +254,9 @@ void shadePortal(inout ShadeResult result, vec3 fColor, float smoothIndex, vec4 
         color += 3.0 * texture(EndPortalSampler, portalUV).rgb * COLORS[i];
     }
 
-    // color += vec3(0.52, 0.0, 1.0) * smoothstep(0.9, 1.0, edgeFactor);
+    vec3 additionalColor = vec3(0.03, 0.27, 0.27);
+    additionalColor *= smoothstep(0.3, 0.5, abs(edgeFactor - 0.5));
+    color += additionalColor;
 
     result.color = color;
     // result.color = vec3(localUV, 0.0);
@@ -310,7 +312,6 @@ ShadeResult shadeClippedTriangle(
     vec2 localUVA = vec2((a.index / 2) / (MAX_FRAMES - 1), int(a.index) % 2 == 0 ? 0.0 : 1.0);
     vec2 localUVB = vec2((b.index / 2) / (MAX_FRAMES - 1), int(b.index) % 2 == 0 ? 0.0 : 1.0);
     vec2 localUVC = vec2((c.index / 2) / (MAX_FRAMES - 1), int(c.index) % 2 == 0 ? 0.0 : 1.0);
-
     vec2 localUV = interpolateAttribute(localUVA, localUVB, localUVC, invWA, invWB, invWC, bary);
 
     // float x = smoothIndex / float(MAX_FRAMES - 1);

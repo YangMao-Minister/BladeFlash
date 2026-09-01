@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/flat_spear",
+  "textures": {
+    "layer0": "minecraft:item/end_spear_in_hand_overlay"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/flat_handheld",
+  "textures": {
+    "layer0": "minecraft:item/end_sword_overlay"
+  }
+}

@@ -91,6 +91,10 @@ void main() {
     if(isMarker > 0.0 && ProjMat[2][3] != 0.0) {
         vec2 pixel = floor(gl_FragCoord.xy);
 
+        if (pixel.y > 0) {
+            discard;
+        }
+
         if(pixel.x == 0) {
             fragColor = EXISTENCE;
         } else if(pixel.x < 17) {
@@ -142,9 +146,10 @@ void main() {
 
             vec2 start = min(min(u0, u1), min(u2, u3));
             vec2 sampleCoord = start + (vec2(texel, 0) + 0.5) / atlasSize;
-            vec2 targetUV = texture(Sampler0, sampleCoord, 0).rg * 255.0;
+            vec4 targetData = texture(Sampler0, sampleCoord, 0) * 255.0;
+            vec2 targetUV = targetData.xy;
             vec2 imgSize = texture(Sampler0, start + vec2(0.0, 1.5) / atlasSize, 0).rg * 255.0;
-            if(targetUV == vec2(0.0) || targetUV.x > imgSize.x || targetUV.y > imgSize.y) {
+            if(targetData.a == 0.0 || targetUV.x > imgSize.x || targetUV.y > imgSize.y) {
                 discard;
             }
 
@@ -164,7 +169,7 @@ void main() {
             vec3 fallbackPos = mix(posTop, posBottom, uv.y);
 
             // 用 atlas UV 本身作为基方向
-            vec2 targetAtlas = start + (targetUV + vec2(1.0, 0.0)) / atlasSize;
+            vec2 targetAtlas = start + (targetUV + vec2(0.5, 0.5)) / atlasSize;
             vec2 deltaT = targetAtlas - texCoord0;
             float detT = dtdx.x * dtdy.y - dtdx.y * dtdy.x;
             vec3 pos = fallbackPos;
